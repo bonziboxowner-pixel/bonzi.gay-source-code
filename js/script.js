@@ -735,7 +735,7 @@ class Bonzi {
         this.runEvent(
             [{
                 type: "text",
-                text: `*notices ${target}'s BonziBulgeâ¢*`,
+                text: `*notices ${target}'s BonziBulge™*`,
                 say: `notices ${target}s bonzibulge`
             }, {
                 type: "text",
