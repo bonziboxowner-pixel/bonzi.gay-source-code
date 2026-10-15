@@ -9,6 +9,10 @@ function clamp(min, x, max) {
     return Math.min(Math.max(x, min), max);
 }
 
+const MAX_VOICE_VALUE = 10000000;
+const DEFAULT_LOCAL_VOICE = Object.freeze({ amplitude: 100, pitch: 1, speed: 1 });
+let localVoiceSettings = { ...DEFAULT_LOCAL_VOICE };
+
 function s4() {
     return floor((1 + random()) * 0x10000).toString(16).substring(1);
 }
@@ -197,8 +201,8 @@ class Bonzi {
         this.userPublic = userPublic ?? {
             name: "BonziBUDDY",
             color: "purple",
-            speed: 175,
-            pitch: 50,
+            speed: 1,
+            pitch: 1,
             voice: "en-us",
         };
         this.color = this.userPublic.color;
@@ -217,8 +221,11 @@ class Bonzi {
 
         this.element = document.createElement("div");
         this.element.classList.add("bonzi");
-        this.element.style.backgroundImage = this.toBgImg();
         this.element.style.zIndex = lastZ++;
+        this.spriteElement = document.createElement("div");
+        this.spriteElement.classList.add("bonzi_sprite");
+        this.element.appendChild(this.spriteElement);
+        this.spriteElement.style.backgroundImage = this.toBgImg();
         this.nametag = document.createElement("div");
         this.nametag.classList.add("bonzi_name");
         this.element.appendChild(this.nametag);
@@ -414,8 +421,8 @@ class Bonzi {
 
     setSprite(sprite) {
         this.sprite = sprite;
-        this.element.style.backgroundPositionX = `-${sprite % 12 * 200}px`;
-        this.element.style.backgroundPositionY = `-${floor(sprite / 12) * 160}px`;
+        this.spriteElement.style.backgroundPositionX = `-${sprite % 12 * 200}px`;
+        this.spriteElement.style.backgroundPositionY = `-${floor(sprite / 12) * 160}px`;
     }
 
     setAnim(anim) {
@@ -536,8 +543,9 @@ class Bonzi {
 
         if (!say.startsWith("-")) {
             speak.play(say, {
-                "pitch": this.userPublic.pitch,
-                "speed": this.userPublic.speed
+                "amplitude": localVoiceSettings.amplitude,
+                "pitch": localVoiceSettings.pitch,
+                "speed": localVoiceSettings.speed
             }, () => {
                 if (!text.includes("||")) this.clearDialog();
             }, (source) => {
@@ -570,8 +578,9 @@ class Bonzi {
                 chat_log_content.scrollTop = chat_log_content.scrollHeight;
             }
             speak.play(text.replaceAll("[[", ""), {
-                "pitch": this.userPublic.pitch,
-                "speed": this.userPublic.speed
+                "amplitude": localVoiceSettings.amplitude,
+                "pitch": localVoiceSettings.pitch,
+                "speed": localVoiceSettings.speed
             }, () => { }, (source) => {
                 this.voiceSource = source;
             });
@@ -726,7 +735,7 @@ class Bonzi {
         this.runEvent(
             [{
                 type: "text",
-                text: `*notices ${target}'s BonziBulge™*`,
+                text: `*notices ${target}'s BonziBulgeâ¢*`,
                 say: `notices ${target}s bonzibulge`
             }, {
                 type: "text",
@@ -754,7 +763,7 @@ class Bonzi {
 
     updateSprite() {
         this.cancel();
-        this.element.style.backgroundImage = this.toBgImg();
+        this.spriteElement.style.backgroundImage = this.toBgImg();
         this.move();
     }
 }
@@ -851,6 +860,57 @@ let socket = io("//");
 
 let usersPublic = new Map;
 let bonzis = new Map;
+
+function localCommandFeedback(message) {
+    bonzilog("server", "", sanitize(message), null, message, true);
+}
+
+function getLocalBonzi() {
+    if (socket.id && bonzis.has(socket.id)) return bonzis.get(socket.id);
+    const name = login_name.value.trim();
+    if (!name) return null;
+    const matches = Array.from(bonzis.values()).filter(bonzi => bonzi.userPublic.name === name);
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function parseLocalVoiceValue(raw) {
+    if (typeof raw !== "string") return null;
+    const value = Number(raw.trim().replace(/^max:/i, ""));
+    return Number.isFinite(value) ? value : null;
+}
+
+function handleLocalCommand(list) {
+    const command = (list[0] || "").toLowerCase();
+    if (command === "rainbow") {
+        const bonzi = getLocalBonzi();
+        if (!bonzi) {
+            localCommandFeedback("Could not uniquely identify your Bonzi. Try a unique nickname.");
+            return true;
+        }
+        const enabled = bonzi.spriteElement.classList.toggle("rainbow");
+        localCommandFeedback(`Rainbow hue ${enabled ? "enabled" : "disabled"} for your Bonzi.`);
+        return true;
+    }
+
+    const setting = {
+        amp: { key: "amplitude", min: 0, label: "eSpeak volume" },
+        pitch: { key: "pitch", min: 1, label: "eSpeak pitch" },
+        speed: { key: "speed", min: 1, label: "eSpeak speed" },
+    }[command];
+    if (!setting) return false;
+    if (!list[1]) {
+        localCommandFeedback(`${setting.label}: ${localVoiceSettings[setting.key]}. Usage: /${command} <${setting.min}-${MAX_VOICE_VALUE}>.`);
+        return true;
+    }
+    const value = parseLocalVoiceValue(list[1]);
+    if (value === null) {
+        localCommandFeedback(`Usage: /${command} <${setting.min}-${MAX_VOICE_VALUE}>.`);
+        return true;
+    }
+    localVoiceSettings[setting.key] = clamp(setting.min, value, MAX_VOICE_VALUE);
+    localCommandFeedback(`Local ${setting.label} set to ${localVoiceSettings[setting.key]}.`);
+    return true;
+}
 
 function login() {
     socket.emit("login", {
@@ -1090,7 +1150,10 @@ function sendInput() {
                 quote: quote,
             });
         } else if (text[0] === "/") {
-            let list = text.slice(1).split(" ");
+            let list = text.slice(1).trim().split(/\s+/);
+            if (handleLocalCommand(list)) {
+                break scope;
+            }
             if (list[0] === "clear") {
                 lastUser = "";
                 chat_log_content.innerText = "";
@@ -1125,6 +1188,8 @@ chat_log_close.onclick = () => {
 };
 
 socket.on("connect", () => {
+    localVoiceSettings.pitch = DEFAULT_LOCAL_VOICE.pitch;
+    localVoiceSettings.speed = DEFAULT_LOCAL_VOICE.speed;
     page_error.hidden = true;
     if (joined) {
         socket.emit("login", {

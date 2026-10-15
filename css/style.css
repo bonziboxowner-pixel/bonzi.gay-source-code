@@ -220,6 +220,22 @@ input[type="text"] {
     background-repeat: no-repeat;
 }
 
+.bonzi_sprite {
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    pointer-events: none;
+}
+
+.bonzi_sprite.rainbow {
+    animation: bonzi-rainbow-hue 4s linear infinite;
+}
+
+@keyframes bonzi-rainbow-hue {
+    from { filter: hue-rotate(0deg); }
+    to { filter: hue-rotate(360deg); }
+}
+
 .bubble {
     font-size: 14px;
     width: 197px;
@@ -1046,7 +1062,7 @@ gay-rainbow code {
  *
  * Version: v@VERSION
  *
- * Authors: BjÃ¶rn Brala (SWIS.nl), Rodney Rehm, Addy Osmani (patches for FF)
+ * Authors: BjÃÂ¶rn Brala (SWIS.nl), Rodney Rehm, Addy Osmani (patches for FF)
  * Web: http://swisnl.github.io/jQuery-contextMenu/
  *
  * Copyright (c) 2011-@YEAR SWIS BV and contributors
